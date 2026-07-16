@@ -1,0 +1,58 @@
+﻿# Dependências
+node_modules/
+
+# Build / artefatos
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.prisma/
+
+# Ambiente e segredos (nunca versionar)
+.env
+.env.*
+!**/.env.example
+
+# Logs e temporários
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tmp/
+temp/
+*.tmp
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Sistema / OS
+desktop.ini
+
+# Testes / caches
+.nyc_output/
+.cache/
+.turbo/
+.vite/
+
+# Uploads locais (se existirem fora do Storage)
+uploads/
+storage/
+
+# Scripts one-off locais (não versionar)
+frontend/apply-drawers.cjs
+frontend/edit-registry.cjs
+frontend/fix-registry-escapes.cjs
+
+# Cursor / agentes (local)
+.cursor/

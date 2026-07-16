@@ -1,0 +1,15 @@
+# Normaliza fins de linha no repositório
+* text=auto eol=lf
+
+*.{cmd,bat,ps1} text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.xlsx binary
+*.xls binary
+*.zip binary
