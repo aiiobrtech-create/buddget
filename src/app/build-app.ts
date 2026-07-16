@@ -51,6 +51,26 @@ export async function buildApp() {
 
   app.get("/health", async () => ({ status: "ok" }));
 
+  app.get("/health/db", async (_request, reply) => {
+    try {
+      const { prisma } = await import("../config/prisma");
+      await prisma.$queryRaw`SELECT 1`;
+      const users = await prisma.user.count({ where: { deletedAt: null } });
+      return { status: "ok", database: "connected", users };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("[health/db]", error);
+      return reply.status(503).send({
+        status: "error",
+        database: "unreachable",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Falha ao conectar no Postgres (verifique DATABASE_URL / DIRECT_URL / sslmode na VPS).",
+      });
+    }
+  });
+
   await registerRoutes(app);
   await registerFrontend(app);
 

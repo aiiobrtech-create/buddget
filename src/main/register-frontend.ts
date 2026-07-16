@@ -9,7 +9,8 @@ const frontendRoot = path.resolve(__dirname, "../../frontend");
 const frontendDist = path.join(frontendRoot, "dist");
 
 function isBackendRoute(url: string) {
-  return url.startsWith("/api") || url.startsWith("/docs") || url === "/health";
+  const pathOnly = url.split("?")[0] ?? url;
+  return pathOnly.startsWith("/api") || pathOnly.startsWith("/docs") || pathOnly.startsWith("/health");
 }
 
 async function createViteDevServer() {

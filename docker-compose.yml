@@ -1,8 +1,12 @@
 ﻿version: "3.9"
 
+# ATENÇÃO: o serviço `db` é só para desenvolvimento local (profile local-db).
+# Em VPS/produção, NÃO use Postgres local — aponte DATABASE_URL/DIRECT_URL para o pooler do Supabase.
+
 services:
   db:
     image: postgres:16
+    profiles: ["local-db"]
     environment:
       POSTGRES_DB: buddget
       POSTGRES_USER: postgres
@@ -18,10 +22,9 @@ services:
       - .env
     environment:
       PORT: 4072
+      NODE_ENV: production
     ports:
       - "4072:4072"
-    depends_on:
-      - db
 
 volumes:
   pgdata:

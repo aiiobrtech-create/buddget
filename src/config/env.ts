@@ -1,5 +1,14 @@
-import "dotenv/config";
 import { z } from "zod";
+import { ensurePostgresSslMode, loadProjectEnv } from "./load-env";
+
+const loadedEnvPath = loadProjectEnv();
+if (process.env.NODE_ENV !== "test" && loadedEnvPath) {
+  // eslint-disable-next-line no-console
+  console.info(`[env] carregado de ${loadedEnvPath}`);
+} else if (process.env.NODE_ENV !== "test" && !process.env.DATABASE_URL) {
+  // eslint-disable-next-line no-console
+  console.warn("[env] .env não encontrado; usando apenas variáveis do processo");
+}
 
 /** Docker Compose local (só usado se não houver projeto Supabase em `SUPABASE_URL`). */
 const DEFAULT_LOCAL_DATABASE_URL =
@@ -139,5 +148,6 @@ if (isSupabaseCloudProjectUrl(data.SUPABASE_URL)) {
 
 export const env = {
   ...data,
-  DIRECT_URL: data.DIRECT_URL ?? data.DATABASE_URL,
+  DATABASE_URL: ensurePostgresSslMode(data.DATABASE_URL),
+  DIRECT_URL: ensurePostgresSslMode(data.DIRECT_URL ?? data.DATABASE_URL),
 };
