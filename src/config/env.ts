@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { ensurePostgresSslMode, loadProjectEnv } from "./load-env";
+import {
+  loadProjectEnv,
+  normalizeSupabaseDatabaseUrl,
+  extractDirectDbProjectRef,
+  isSupabaseDirectDbHost,
+  isSupabasePoolerHost,
+} from "./load-env";
 
 const loadedEnvPath = loadProjectEnv();
 if (process.env.NODE_ENV !== "test" && loadedEnvPath) {
@@ -38,7 +44,6 @@ function extractSupabaseProjectRef(supabaseUrl: string): string | null {
   }
 }
 
-/** Hostname costuma ser *.supabase.co, *.pooler.supabase.com ou *supabase.com (AWS pooler). */
 function isSupabasePostgresHost(databaseUrl: string): boolean {
   try {
     const h = new URL(databaseUrl).hostname.toLowerCase();
@@ -62,6 +67,16 @@ function looksLikeLocalPostgres(databaseUrl: string): boolean {
   }
 }
 
+function maskDbUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.password) u.password = "***";
+    return u.toString();
+  } catch {
+    return "(inválida)";
+  }
+}
+
 const envSchema = z.object({
   PORT: z.coerce.number().default(4072),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -73,7 +88,7 @@ const envSchema = z.object({
       throw new Error(
         `DATABASE_URL está vazio. Com Supabase, copie a URI em Project Settings → Database.\n` +
           (ref ? `Projeto: ${ref} → ${supabaseProjectDashboardDatabase(ref)}\n` : "") +
-          `Use Transaction pooler (porta 6543, ?pgbouncer=true) em DATABASE_URL e Session/Direct (5432) em DIRECT_URL para o Prisma.`,
+          `Na VPS use o **Session pooler** (Connect → Session, porta 5432, host *.pooler.supabase.com).`,
       );
     }
     if (process.env.NODE_ENV === "production") return s;
@@ -83,6 +98,10 @@ const envSchema = z.object({
     const s = typeof val === "string" ? val.trim() : "";
     return s.length > 0 ? s : undefined;
   }, z.string().optional()),
+  /** Ex.: aws-0-us-east-1.pooler.supabase.com — copie do botão Connect do Supabase */
+  SUPABASE_POOLER_HOST: z.string().optional(),
+  /** transaction | session (padrão session para VPS) */
+  SUPABASE_POOLER_MODE: z.string().optional(),
   JWT_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
@@ -103,7 +122,7 @@ if (!parsed.success) {
   throw new Error(
     `Invalid environment variables: ${parsed.error.message}\n` +
       `Campos: ${JSON.stringify(flat, null, 2)}\n` +
-      `Dica Supabase: DATABASE_URL / DIRECT_URL em Project Settings → Database (connection string).`,
+      `Dica Supabase: use Connection Pooler (Session) do botão Connect — db.* é IPv6-only.`,
   );
 }
 
@@ -113,41 +132,82 @@ if (isSupabaseCloudProjectUrl(data.SUPABASE_URL)) {
   if (!isSupabasePostgresHost(data.DATABASE_URL)) {
     throw new Error(
       `DATABASE_URL não aponta para o Postgres do Supabase (hostname esperado: *.supabase.co ou *.pooler.supabase.com).\n` +
-        `Atual em: ${supabaseProjectDashboardDatabase(extractSupabaseProjectRef(data.SUPABASE_URL) ?? "SEU_REF")}`,
+        `Painel: ${supabaseProjectDashboardDatabase(extractSupabaseProjectRef(data.SUPABASE_URL) ?? "SEU_REF")}`,
     );
   }
   if (looksLikeLocalPostgres(data.DATABASE_URL)) {
     throw new Error(
       `DATABASE_URL está em localhost, mas SUPABASE_URL é um projeto Supabase.\n` +
-        `Remova o Postgres local do DATABASE_URL e use a connection string do painel (Database → Connection string).`,
+        `Use a connection string do painel (Connect → Session pooler).`,
     );
   }
   const rawDirect = typeof process.env.DIRECT_URL === "string" ? process.env.DIRECT_URL.trim() : "";
   if (rawDirect.length === 0) {
     throw new Error(
-      `Defina DIRECT_URL no .env. O Prisma usa \`directUrl\` no schema; no Supabase use a URI **Session** ou **Direct** (porta 5432). ` +
-        `Se DATABASE_URL já for a URI direta (sem PgBouncer), repita a mesma string em DIRECT_URL.`,
+      `Defina DIRECT_URL no .env (Session pooler :5432 ou a mesma URI de DATABASE_URL se já for pooler session).`,
     );
-  }
-  if (data.DATABASE_URL.includes("pgbouncer=true")) {
-    if (rawDirect === data.DATABASE_URL || rawDirect.includes("pgbouncer=true")) {
-      throw new Error(
-        `DATABASE_URL usa PgBouncer; DIRECT_URL deve ser a URI **Session** ou **Direct** (5432, sem ?pgbouncer=true), diferente da URL do pooler.`,
-      );
-    }
   }
   if (looksLikeLocalPostgres(rawDirect)) {
     throw new Error("DIRECT_URL não pode ser localhost quando o banco é Supabase.");
   }
   if (!isSupabasePostgresHost(rawDirect)) {
-    throw new Error(
-      "DIRECT_URL deve ser uma connection string do Supabase (Session/Direct ou mesma URI direta de DATABASE_URL).",
-    );
+    throw new Error("DIRECT_URL deve ser uma connection string do Supabase.");
   }
+
+  // Em produção, db.* (IPv6) sem pooler configurado → falha explícita
+  try {
+    const dbHost = new URL(data.DATABASE_URL).hostname;
+    if (
+      data.NODE_ENV === "production" &&
+      isSupabaseDirectDbHost(dbHost) &&
+      !process.env.SUPABASE_POOLER_HOST?.trim()
+    ) {
+      throw new Error(
+        `DATABASE_URL usa db.*.supabase.co (somente IPv6). Em VPS isso falha.\n` +
+          `1) No Supabase: Connect → Session pooler → copie a URI (host *.pooler.supabase.com:5432)\n` +
+          `2) Cole em DATABASE_URL e DIRECT_URL\n` +
+          `   OU defina SUPABASE_POOLER_HOST=aws-0-<regiao>.pooler.supabase.com (mesmo host do Connect)\n` +
+          `Docs: https://supabase.com/docs/guides/database/connecting-to-postgres`,
+      );
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("somente IPv6")) throw e;
+  }
+}
+
+const databaseUrl = normalizeSupabaseDatabaseUrl(data.DATABASE_URL, { role: "runtime" });
+const directUrl = normalizeSupabaseDatabaseUrl(data.DIRECT_URL ?? data.DATABASE_URL, { role: "direct" });
+
+if (process.env.NODE_ENV !== "test") {
+  try {
+    const runtimeHost = new URL(databaseUrl).hostname;
+    const rawHost = new URL(data.DATABASE_URL).hostname;
+    if (extractDirectDbProjectRef(rawHost) && isSupabasePoolerHost(runtimeHost)) {
+      // eslint-disable-next-line no-console
+      console.info(`[env] DATABASE_URL reescrita para pooler IPv4: ${maskDbUrl(databaseUrl)}`);
+    } else if (isSupabaseDirectDbHost(runtimeHost)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[env] DATABASE_URL ainda é db.* (IPv6). Em VPS defina Session pooler ou SUPABASE_POOLER_HOST. Atual: ${maskDbUrl(databaseUrl)}`,
+      );
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+if (databaseUrl.includes("pgbouncer=true") && directUrl === databaseUrl) {
+  throw new Error(
+    `DATABASE_URL (transaction/pgbouncer) e DIRECT_URL ficaram idênticas. ` +
+      `Use Session (:5432) em DIRECT_URL ou nas duas se for VPS persistente.`,
+  );
 }
 
 export const env = {
   ...data,
-  DATABASE_URL: ensurePostgresSslMode(data.DATABASE_URL),
-  DIRECT_URL: ensurePostgresSslMode(data.DIRECT_URL ?? data.DATABASE_URL),
+  DATABASE_URL: databaseUrl,
+  DIRECT_URL: directUrl,
 };
+
+process.env.DATABASE_URL = databaseUrl;
+process.env.DIRECT_URL = directUrl;

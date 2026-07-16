@@ -1,7 +1,8 @@
 ﻿version: "3.9"
 
 # ATENÇÃO: o serviço `db` é só para desenvolvimento local (profile local-db).
-# Em VPS/produção, NÃO use Postgres local — aponte DATABASE_URL/DIRECT_URL para o pooler do Supabase.
+# Em VPS/produção, NÃO use Postgres local — aponte DATABASE_URL/DIRECT_URL ao Session pooler
+# (*.pooler.supabase.com:5432) ou defina SUPABASE_POOLER_HOST no .env.
 
 services:
   db:

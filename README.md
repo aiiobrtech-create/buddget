@@ -269,15 +269,20 @@ Erro:
 Veja `.env.example`:
 
 **Postgres via Supabase (recomendado)**  
-Se `SUPABASE_URL` for `*.supabase.co`, o backend exige que `DATABASE_URL` e `DIRECT_URL` apontem para o **mesmo projeto** (host `*.supabase.co` ou `*.pooler.supabase.com`), não para `localhost`.  
-No painel: **Project Settings → Database → Connection string**: use **Transaction** (com `?pgbouncer=true`) em `DATABASE_URL` e **Session** ou URI **Direct** em `DIRECT_URL` para o Prisma (`directUrl`). Se usar só a URI direta `db.<ref>.supabase.co:5432` em ambas, não use pooler em `DATABASE_URL`.
+Se `SUPABASE_URL` for `*.supabase.co`, o backend exige que `DATABASE_URL` e `DIRECT_URL` apontem para o **mesmo projeto** (host `*.supabase.co` ou `*.pooler.supabase.com`), não para `localhost`.
 
-A validação em `src/config/env.ts` impede `DATABASE_URL` local com `SUPABASE_URL` de cloud.
+- **PC local (com IPv6):** a URI direta `db.<ref>.supabase.co:5432` costuma funcionar.
+- **VPS (IPv4, ex. Hostinger):** use o **Session pooler** do botão **Connect** no dashboard (`*.pooler.supabase.com:5432`, usuário `postgres.<ref>`). Cole a mesma URI em `DATABASE_URL` e `DIRECT_URL`, **ou** mantenha `db.*` e defina `SUPABASE_POOLER_HOST` (o app reescreve).
+- Diagnóstico: `GET /health/db` ou `npx tsx scripts/check-db.ts` / `npx tsx scripts/print-pooler-urls.ts`.
+
+A validação em `src/config/env.ts` impede `DATABASE_URL` local com `SUPABASE_URL` de cloud e, em `production`, bloqueia `db.*` sem pooler.
 
 - PORT
 - NODE_ENV
 - DATABASE_URL
 - DIRECT_URL
+- SUPABASE_POOLER_HOST
+- SUPABASE_POOLER_MODE
 - JWT_SECRET
 - JWT_REFRESH_SECRET
 - JWT_ACCESS_EXPIRES_IN

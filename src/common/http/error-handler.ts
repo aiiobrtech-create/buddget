@@ -52,7 +52,7 @@ export function errorHandler(error: FastifyError | Error, _request: FastifyReque
     return reply.status(503).send(
       fail(
         "DATABASE_UNAVAILABLE",
-        "Não foi possível conectar ao banco. Na VPS use DATABASE_URL do pooler Supabase (porta 6543, pgbouncer=true, sslmode=require) e reinicie o app.",
+        "Não foi possível conectar ao banco. Na VPS use o Session pooler do Supabase (host *.pooler.supabase.com:5432, sslmode=require) ou SUPABASE_POOLER_HOST e reinicie o app.",
       ),
     );
   }
